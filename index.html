@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+	<title>3D演示</title>
+	<style>
+	body, canvas{
+		margin: 0;
+	}
+	</style>
+	<script src="./js/three.min.js"></script>
+	<script src="./js/dat.gui.min.js"></script>
+	<script src="./js/OBJLoader.js"></script>
+	<script src="./js/MTLLoader.js"></script>
+	<script src="./js/OrbitControls.js"></script>
+	
+	<!-- 调试工具 -->
+	<script src="https://cdn.bootcss.com/vConsole/3.3.4/vconsole.min.js"></script>
+	<script>
+	if ( /ipad|iphone|midp|rv:1.2.3.4|ucweb|android|windows ce|windows mobile/.test( navigator.userAgent.toLowerCase() ) ){
+		//手机
+		//eruda.init();
+		new VConsole();
+	}
+	</script>
+	
+</head>
+<body>
+	
+<script>
+/*场景*/
+var scene = new THREE.Scene();
+
+const axisHelper = new THREE.AxisHelper(310);
+scene.add(axisHelper);
+
+
+/*像机*/
+var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10000);
+/*
+** 相机后移的幅度
+** 关键参数 如果跟模型不匹配 会导致看不到模型 也会黑屏
+** 本模型设置为10 其他模型需要自己调整
+ 		*/
+camera.position.z = -1000;
+scene.add(camera);
+camera.lookAt(scene.position)
+
+/*渲染器*/
+var renderer = new THREE.WebGLRenderer();
+renderer.setSize( window.innerWidth, window.innerHeight );//画布大小
+renderer.setClearColor("#eef", 1); //设置背景颜色
+document.body.appendChild( renderer.domElement ); //添加到Html上
+  
+   /*
+   **光源
+   **光源很重要 没有光源也会黑屏
+   */
+   var light = new THREE.DirectionalLight(0xffffff);//光源颜色
+   light.position.set(20, 10, 5);//光源位置	   
+   scene.add(light);//加入场景
+   
+   //环境光
+	const ambient = new THREE.AmbientLight(0x444444);
+	scene.add(ambient);
+ 
+
+setInterval(()=>{
+	renderer.render(scene, camera);
+});
+
+
+/*加载器*/
+
+const material = new THREE.MeshLambertMaterial({
+	map: new THREE.TextureLoader().load("blocks.png")
+});
+
+var objLoader = new THREE.OBJLoader();
+objLoader.load("steps2.obj", function(object){
+	for (const child of object.children)
+		child.material = material;
+	console.log(object)
+    scene.add(object); //加入场景
+	settings_folder.add(object, "visible").name("参考模型可视");
+});
+
+const control = new THREE.OrbitControls(camera, renderer.domElement); //创建控件对象
+
+
+
+class Vertex{
+	constructor(x, y, z){
+		this.x = x;
+		this.y = y;
+		this.z = z;
+	}
+	
+	setMesh(mesh){
+		this.mesh = mesh;
+	}
+	
+	updatePosition(){
+		this.mesh.position.set(this.x, this.y, this.z);
+	}
+}
+
+class UV{
+	constructor(u, v, w=0){
+		this.u = u;
+		this.v = v;
+		this.w = w;
+	}
+}
+
+class Normal{
+	constructor(x, y, z){
+		this.x = x;
+		this.y = y;
+		this.z = z;
+	}
+}
+
+class Face{
+	constructor(vertexs, uvs, normals){
+		this.vertexs = [...vertexs];
+		this.uvs = [...uvs];
+		this.normals = [...normals];
+	}
+	
+	addVertex(vertex, uv, normal){
+		this.vertexs.push(vertex);
+		this.uvs.push(uv);
+		this.normals.push(normal);
+		return this.vertexs.length - 1;
+	}
+}
+
+class Obj{
+	constructor(name, ...faces){
+		this.name = name;
+		this.faces = faces;
+	}
+	
+	addFace(face){
+		this.faces.push(face);
+		return this.faces.length - 1;
+	}
+}
+
+
+const vertex_geometry = new THREE.SphereBufferGeometry(5);
+const red_material = new THREE.MeshLambertMaterial({ color: "#ff0000" });
+const blue_material = new THREE.MeshLambertMaterial({ color: "#0000ff" });
+const green_material = new THREE.MeshLambertMaterial({ color: "#00ff00" });
+
+
+//顶点
+const vertexs = [];
+let vertexNew = new Vertex(0, 0, 0);
+
+const vertexNew_mesh = new THREE.Mesh(vertex_geometry, red_material);
+scene.add(vertexNew_mesh);
+vertexNew.setMesh(vertexNew_mesh);
+
+//UV
+const uvs = [];
+let uvNew = new UV(0, 0, 0);
+
+//法线
+const normals = [];
+let normalNew = new Normal(0, 0, 0);
+
+//面
+const faces = [];
+
+//物体
+const objects = [];
+
+
+
+function translateToObj(){
+	let str = "";
+			for (const [i,vertex] of Object.entries(vertexs))
+				str += `#vertex ${+i+1}\nv ${vertex.x} ${vertex.y} ${vertex.z}\n`;
+			
+			str += "\n";
+			for (const [i,uv] of Object.entries(uvs))
+				str += `#uv ${+i+1}\nvt ${uv.u} ${uv.v} ${uv.w}\n`;
+			
+			str += "\n";
+			for (const [i,normal] of Object.entries(normals))
+				str += `#normal ${+i+1}\nvn ${normal.x} ${normal.y} ${normal.z}\n`;
+			
+			for (const object of objects){
+				str += "\n";
+				str += `o ${object.name}\n`;
+				console.log(object)
+				for (const face of object.faces){
+					str += "f ";
+					for (let i=0; i<face.vertexs.length; i++)
+						str += `${face.vertexs[i]}/${face.uvs[i]}/${face.normals[i]} `;
+					str = str.substr(0, str.length-1) + "\n";
+				}
+			}
+	
+	return str;
+}
+
+function loadObj(str){
+	return new Promise((resolve, reject)=>{
+		const data = str.split("\n").filter(
+			line => line != "" && line[0] != "#"
+		).join("\n");
+		console.log(str)
+		const objLoader = new THREE.OBJLoader();
+		objLoader.load("data:application/octet-stream,"+encodeURIComponent(data), function(object){
+			for (const child of object.children)
+				child.material = material;
+			console.log(object)
+			scene.add(object); //加入场景
+			resolve(object);
+		});
+	});
+}
+
+
+const gui = new dat.GUI({
+	name: "控制/调试",
+	useLocalStorage: true, // 使用LocalStorage来存储
+	closeOnTop: true // 关闭按钮是否在顶部
+});
+const settings_folder = gui.addFolder("settings");
+	settings_folder.add({
+		f(){
+			const str = translateToObj();
+			console.log(str)
+			localStorage.setItem("obj-model", str);
+		}
+	}, "f").name("保存");
+	settings_folder.add({
+		f(){
+			let model;
+			const str = localStorage.getItem("obj-model");
+			loadObj(str).then(object => {
+				model = object;
+				settings_folder.add({
+					f(){
+						scene.remove(model);
+						loadObj(translateToObj()).then(object => model = object);
+					}
+				}, "f").name("重载模型");
+			});
+			
+			let addSubFace;
+			for (const line of str.split("\n")){
+				const part = line.split(" ");
+				switch (part[0]){
+					case "v":
+						vertexNew.x = +part[1];
+						vertexNew.y = +part[2];
+						vertexNew.z = +part[3];
+						addVertex();
+						break;
+						
+					case "vt":
+						uvNew.u = +part[1];
+						uvNew.v = +part[2];
+						uvNew.w = +part[3];
+						addUV();
+						break;
+					
+					case "vn":
+						normalNew.x = +part[1];
+						normalNew.y = +part[2];
+						normalNew.z = +part[3];
+						addNormal();
+						break;
+					
+					case "o":
+						addSubFace = addObject(part.slice(1).join(" "));
+						break;
+						
+					case "f":
+						const addSubVertex = addFace();
+						for (let i=1; i<part.length; i++)
+							addSubVertex(+part[i].split("/")[0], +part[i].split("/")[1], +part[i].split("/")[2]);
+						addSubFace(faces.length);
+						break;
+					
+				}
+			}
+		}
+	}, "f").name("加载");
+
+
+/* 顶点 */
+//文字转纹理
+function text2texture(text, fontSize){
+	const canvas = document.createElement("canvas");
+	const ctx = canvas.getContext("2d");
+
+	ctx.beginPath();
+	ctx.font = fontSize + "px 宋体";
+	ctx.fillStyle = "#00ff00";
+	canvas.width = ctx.measureText(text).width;
+	canvas.height = fontSize;
+
+	ctx.beginPath();
+	ctx.font = fontSize + "px 宋体";
+	ctx.fillStyle = "#ff0000";
+	ctx.translate(canvas.width/2, canvas.height/2); //中心定位
+	ctx.textAlign = "center"; //水平居中
+	ctx.textBaseline = "middle"; //垂直居中
+	ctx.fillText(text, 0, 0);
+	return {
+		texture: new THREE.CanvasTexture(canvas),
+		width: canvas.width,
+		height: canvas.height
+	};
+}
+function addVertex(){
+	for (const [i,vertex] of Object.entries(vertexs))
+		if (vertex.x == vertexNew.x && vertex.y == vertexNew.y && vertex.z == vertexNew.z)
+			return alert("已存在相同顶点：" + (+i+1));
+
+	//新建顶点
+	vertexs.push(vertexNew); //入栈
+	const vertex_folder = vertexs_folder.addFolder("顶点 " + vertexs.length);
+		const _vertex = vertexNew;
+		vertex_folder.add(vertexNew, "x", -150, 150, 1).onChange(()=>_vertex.updatePosition());
+		vertex_folder.add(vertexNew, "y", 0, 300, 1).onChange(()=>_vertex.updatePosition());
+		vertex_folder.add(vertexNew, "z", -150, 150, 1).onChange(()=>_vertex.updatePosition());
+	
+	//顶点表示为蓝色小球
+	const vertex_mesh = new THREE.Mesh(vertex_geometry, blue_material);
+	vertex_mesh.position.set(vertexNew.x, vertexNew.y, vertexNew.z);
+	scene.add(vertex_mesh);
+	vertexNew.setMesh(vertex_mesh);
+	const {texture, width, height} = text2texture(vertexs.length, 10);
+	const text_material = new THREE.SpriteMaterial({
+		map: texture
+	});
+	const text = new THREE.Sprite(text_material);
+	text.scale.set(width, height, 1);
+	text.position.set(0, 10, 0);
+	vertex_mesh.add(text);
+
+	
+	//新顶点
+	vertexNew = new Vertex(0, 0, 0);
+	vertex_new_folder.remove(vertex_new_x);
+	vertex_new_folder.remove(vertex_new_y);
+	vertex_new_folder.remove(vertex_new_z);
+	vertex_new_x = vertex_new_folder.add(vertexNew, "x", -150, 150, 1).onChange(()=>vertexNew.updatePosition());
+	vertex_new_y = vertex_new_folder.add(vertexNew, "y", 0, 300, 1).onChange(()=>vertexNew.updatePosition());
+	vertex_new_z = vertex_new_folder.add(vertexNew, "z", -150, 150, 1).onChange(()=>vertexNew.updatePosition());
+	vertexNew.setMesh(vertexNew_mesh);
+	vertexNew.updatePosition();
+}
+
+const vertexs_folder = gui.addFolder("顶点");
+	const vertex_new_folder = vertexs_folder.addFolder("New");
+		vertex_new_folder.add({addVertex}, "addVertex").name("添加顶点");
+		let vertex_new_x = vertex_new_folder.add(vertexNew, "x", -150, 150, 1).onChange(()=>vertexNew.updatePosition());
+		let vertex_new_y = vertex_new_folder.add(vertexNew, "y", 0, 300, 1).onChange(()=>vertexNew.updatePosition());
+		let vertex_new_z = vertex_new_folder.add(vertexNew, "z", -150, 150, 1).onChange(()=>vertexNew.updatePosition());
+		
+
+/* UV */
+function addUV(){
+	for (const [i,uv] of Object.entries(uvs))
+		if (uv.u == uvNew.u && uv.v == uvNew.v)
+			return alert("已存在相同UV：" + (+i+1));
+
+	//新建UV
+	uvs.push(uvNew); //入栈
+	const uv_folder = uvs_folder.addFolder("UV " + uvs.length);
+		uv_folder.add(uvNew, "u", 0, 1, 0.1);
+		uv_folder.add(uvNew, "v", 0, 1, 0.1);
+		uv_folder.add(uvNew, "w", 0, 1, 0.1);
+	
+	//新顶点
+	uvNew = new UV(0, 0, 0);
+	uv_new_folder.remove(uv_new_x);
+	uv_new_folder.remove(uv_new_y);
+	uv_new_folder.remove(uv_new_z);
+	uv_new_x = uv_new_folder.add(uvNew, "u", 0, 1, 0.1);
+	uv_new_y = uv_new_folder.add(uvNew, "v", 0, 1, 0.1);
+	uv_new_z = uv_new_folder.add(uvNew, "w", 0, 1, 0.1);
+}
+
+const uvs_folder = gui.addFolder("UVs");
+	const uv_new_folder = uvs_folder.addFolder("New");
+		uv_new_folder.add({addUV}, "addUV").name("添加UV");
+		let uv_new_x = uv_new_folder.add(uvNew, "u", 0, 1, 0.1);
+		let uv_new_y = uv_new_folder.add(uvNew, "v", 0, 1, 0.1);
+		let uv_new_z = uv_new_folder.add(uvNew, "w", 0, 1, 0.1);
+		
+
+/* 法线 */
+function addNormal(){
+	for (const [i,normal] of Object.entries(normals))
+		if (normal.x == normalNew.x && normal.y == normalNew.y && normal.z == normalNew.z)
+			return alert("已存在相同法线：" + (+i+1));
+
+	//新建normal
+	normals.push(normalNew); //入栈
+	const normal_folder = normals_folder.addFolder("法线 " + normals.length);
+		normal_folder.add(normalNew, "x", -1, 1, 0.1);
+		normal_folder.add(normalNew, "y", -1, 1, 0.1);
+		normal_folder.add(normalNew, "z", -1, 1, 0.1);
+	
+	//新顶点
+	normalNew = new Normal(0, 0, 0);
+	normal_new_folder.remove(normal_new_x);
+	normal_new_folder.remove(normal_new_y);
+	normal_new_folder.remove(normal_new_z);
+	normal_new_x = normal_new_folder.add(normalNew, "x", -1, 1, 0.1);
+	normal_new_y = normal_new_folder.add(normalNew, "y", -1, 1, 0.1);
+	normal_new_z = normal_new_folder.add(normalNew, "z", -1, 1, 0.1);
+}
+
+const normals_folder = gui.addFolder("法线");
+	const normal_new_folder = normals_folder.addFolder("New");
+		normal_new_folder.add({addNormal}, "addNormal").name("添加法线");
+		let normal_new_x = normal_new_folder.add(normalNew, "x", -1, 1, 0.1);
+		let normal_new_y = normal_new_folder.add(normalNew, "y", -1, 1, 0.1);
+		let normal_new_z = normal_new_folder.add(normalNew, "z", -1, 1, 0.1);
+		
+
+/* 面 */
+function addFace(face=new Face([], [], [])){
+	faces.push(face);
+	
+	const addSubVertex = (vertexId=vertexs.length, UVId=uvs.length, NormalId=normals.length)=>{
+		const index = face.addVertex(vertexId, UVId, NormalId);
+		face_vertexs_folder.add(face.vertexs, index).name(face.vertexs.length + "顶点序号").step(1);
+		face_uvs_folder.add(face.uvs, index).name(face.uvs.length + "UV序号").step(1);
+		face_normals_folder.add(face.normals, index).name(face.normals.length + "法线序号").step(1);
+	};
+	
+	const face_folder = faces_folder.addFolder("面 " + faces.length);
+		const face_vertexs_folder = face_folder.addFolder("顶点");
+		const face_uvs_folder = face_folder.addFolder("UVs");
+		const face_normals_folder = face_folder.addFolder("法线");
+		face_folder.add({addSubVertex}, "addSubVertex").name("添加顶点");
+	
+	return addSubVertex;
+}
+
+const faces_folder = gui.addFolder("面");
+	faces_folder.add({addFace}, "addFace").name("新建面");
+
+
+/* 物体 */
+function addObject(name = prompt("请输入物体名称", "物体 " + (objects.length+1)) ){
+	const object = new Obj(name);
+	objects.push(object);
+	
+	const addSubFace = (faceId = faces.length)=>{
+		const id = {id: faceId};
+		const index = object.addFace(faces[id.id-1]);
+		object_faces_folder.add(id, "id").name(object.faces.length + "面序号").step(1).onChange(()=>{
+			object.faces[index] = faces[id.id-1];
+		});
+	};
+	
+	const object_folder = objects_folder.addFolder(name);
+		const object_faces_folder = object_folder.addFolder("面");
+		object_folder.add({addSubFace}, "addSubFace").name("添加面");
+	
+	return addSubFace;
+}
+
+const objects_folder = gui.addFolder("物体");
+	objects_folder.add({addObject}, "addObject").name("新建物体");
+
+</script>
+</body>
+</html>
